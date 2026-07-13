@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supabase Cloud Todo List</title>
+  <meta name="description" content="Supabase와 GitHub Pages로 연동된 프리미엄 반응형 투두리스트">
+  
+  <!-- Font and Styles -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Supabase JS Client (v2) CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <div class="brand-icon">
+          <i data-lucide="check-square"></i>
+        </div>
+        <div class="brand-title">
+          <h1>Cloud Tasks</h1>
+          <p>Supabase + GitHub Pages</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div id="connectionPill" class="connection-badge local" title="클릭하여 Supabase 설정">
+          <span class="dot"></span>
+          <span id="connectionStatusText">Local Storage</span>
+        </div>
+        <button id="btnSettings" class="btn-icon" title="설정">
+          <i data-lucide="settings"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Supabase Auth Section (Visible only when Supabase is connected but user is not logged in) -->
+    <div id="authSection" class="auth-panel" style="display: none;">
+      <div class="auth-header">
+        <h3 id="authTitle">로그인</h3>
+        <div class="auth-tabs">
+          <button id="tabSignin" class="auth-tab active">로그인</button>
+          <button id="tabSignup" class="auth-tab">회원가입</button>
+        </div>
+      </div>
+      
+      <form id="authForm" class="auth-form">
+        <div class="form-group">
+          <label for="authEmail">이메일</label>
+          <input type="email" id="authEmail" class="form-input" placeholder="example@domain.com" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="authPassword">비밀번호</label>
+          <input type="password" id="authPassword" class="form-input" placeholder="••••••••" required autocomplete="current-password">
+        </div>
+        <button type="submit" id="btnAuthSubmit" class="auth-submit-btn">로그인</button>
+      </form>
+    </div>
+
+    <!-- Active User Status (Visible only when user is logged in to Supabase) -->
+    <div id="userStatusSection" class="auth-user-info" style="display: none;">
+      <span class="user-email" id="userEmailText">user@example.com</span>
+      <button id="btnSignOut" class="btn-signout">로그아웃</button>
+    </div>
+
+    <!-- Stats Panel -->
+    <div class="stats-widget">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value" id="statTotal">0</span>
+          <span class="stat-label">전체 할 일</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="statCompleted">0</span>
+          <span class="stat-label">완료됨</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="statProgressPercent">0%</span>
+          <span class="stat-label">진행률</span>
+        </div>
+      </div>
+      <div class="progress-container">
+        <div id="progressBar" class="progress-bar"></div>
+      </div>
+    </div>
+
+    <!-- Create Todo Input -->
+    <form id="todoForm" class="todo-form">
+      <div class="input-container">
+        <input type="text" id="todoInput" class="todo-input" placeholder="새로운 할 일을 입력하세요..." required autocomplete="off">
+        <button type="submit" id="btnAddTodo" class="btn-add">
+          <i data-lucide="plus"></i>
+          <span>추가</span>
+        </button>
+      </div>
+      <div class="form-options">
+        <div class="priority-selector">
+          <span class="priority-label">우선순위:</span>
+          <div class="priority-chips">
+            <span class="priority-chip low" data-priority="low">낮음</span>
+            <span class="priority-chip medium active" data-priority="medium">보통</span>
+            <span class="priority-chip high" data-priority="high">높음</span>
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <!-- Filters & Actions -->
+    <div class="todo-controls">
+      <div class="filters">
+        <button class="filter-btn active" data-filter="all">전체</button>
+        <button class="filter-btn" data-filter="active">진행 중</button>
+        <button class="filter-btn" data-filter="completed">완료</button>
+      </div>
+      <button id="btnClearCompleted" class="clear-completed">완료 목록 삭제</button>
+    </div>
+
+    <!-- Todo List Grid / Content -->
+    <div id="todoList" class="todo-list-wrapper">
+      <!-- Loading skeletons (dynamically hidden) -->
+      <div class="skeleton-loader">
+        <div class="skeleton-item"></div>
+        <div class="skeleton-item"></div>
+        <div class="skeleton-item"></div>
+      </div>
+      <!-- Items will be injected here -->
+    </div>
+  </div>
+
+  <!-- Settings Modal (Supabase Credentials) -->
+  <div id="settingsModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Supabase 클라우드 설정</h3>
+        <button id="btnSettingsClose" class="btn-icon">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">
+          Supabase 프로젝트 정보를 입력하여 클라우드 동기화 및 회원 인증 기능을 활성화하세요. 정보가 비어있으면 Local Storage 기반의 로컬 모드로 작동합니다.
+        </p>
+        <div class="form-group">
+          <label for="dbUrl">Supabase Project URL</label>
+          <input type="url" id="dbUrl" class="form-input" placeholder="https://xxxxxx.supabase.co" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="dbAnonKey">Supabase API Anon Key</label>
+          <input type="text" id="dbAnonKey" class="form-input" placeholder="eyJhbGciOiJIUzI1Ni..." autocomplete="off">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnSettingsCancel" class="btn-secondary">취소</button>
+        <button id="btnSettingsSave" class="btn-primary">저장 및 연결</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Application Logic Module -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>
