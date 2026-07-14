@@ -1,4 +1,5 @@
-import { SUPABASE_CONFIG } from './config.js';
+// SUPABASE_CONFIG is loaded as a global from config.js
+// window.supabase is loaded from the CDN script
 
 // Application state
 const state = {
@@ -8,7 +9,8 @@ const state = {
   todos: [],
   selectedPriority: 'medium',
   activeFilter: 'all',
-  currentEditingId: null
+  currentEditingId: null,
+  isInitializing: false // guard to prevent duplicate loads during startup
 };
 
 // DOM Elements
@@ -78,11 +80,17 @@ function showToast(message, type = 'success') {
 
 // --- Initialization ---
 async function init() {
+  // Prevent double invocation
+  if (state.isInitializing) return;
+  state.isInitializing = true;
+
   setupEventListeners();
   await checkDatabaseConnection();
   await loadTodos();
   updateUI();
   lucide.createIcons();
+
+  state.isInitializing = false;
 }
 
 // --- Connection & Client Configuration ---
@@ -97,7 +105,7 @@ async function checkDatabaseConnection() {
   if (url && key) {
     try {
       // Initialize Supabase Client
-      state.supabase = supabase.createClient(url, key);
+      state.supabase = window.supabase.createClient(url, key);
       
       // Test the connection by retrieving session
       const { data, error } = await state.supabase.auth.getSession();
@@ -137,7 +145,7 @@ function updateConnectionPill(status, label) {
   connectionStatusText.textContent = label;
 }
 
-function handleAuthStateChange() {
+function handleAuthStateChange(reload = true) {
   if (state.mode === 'supabase') {
     if (state.currentUser) {
       authSection.style.display = 'none';
@@ -145,7 +153,10 @@ function handleAuthStateChange() {
       userEmailText.textContent = state.currentUser.email;
       todoForm.style.display = 'flex';
       document.querySelector('.todo-controls').style.display = 'flex';
-      loadTodos().then(() => updateUI());
+      // Only reload from DB if explicitly triggered (not during init, where init() handles it)
+      if (reload && !state.isInitializing) {
+        loadTodos().then(() => updateUI());
+      }
     } else {
       authSection.style.display = 'flex';
       userStatusSection.style.display = 'none';
@@ -161,7 +172,10 @@ function handleAuthStateChange() {
     userStatusSection.style.display = 'none';
     todoForm.style.display = 'flex';
     document.querySelector('.todo-controls').style.display = 'flex';
-    loadTodos().then(() => updateUI());
+    // Only reload during explicit state changes, not during init
+    if (reload && !state.isInitializing) {
+      loadTodos().then(() => updateUI());
+    }
   }
 }
 
@@ -667,8 +681,10 @@ function getPriorityLabel(priority) {
 }
 
 // Initialize on DOM Load
-document.addEventListener('DOMContentLoaded', init);
-// Run anyway if DOM already loaded
-if (document.readyState === 'interactive' || document.readyState === 'complete') {
+// The script is placed at the end of <body>, so the DOM is already ready.
+// We still listen to DOMContentLoaded as a safe fallback.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
   init();
 }
